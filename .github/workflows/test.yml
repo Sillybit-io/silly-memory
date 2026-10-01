@@ -40,7 +40,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
       - name: Run unit tests
         run: python3 -m unittest discover -s memory/tests -p "test_*.py" -v
 
@@ -53,7 +52,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
       - name: Cache HF weights
         uses: actions/cache@v4
         with:
@@ -80,7 +78,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
       - name: Run zero-network defense-in-depth test
         run: python3 -m unittest memory.tests.test_zero_network -v
 
