@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart":        [ { "command": "./hooks/memory-hook.sh" } ],
+    "beforeSubmitPrompt":  [ { "command": "./hooks/memory-hook.sh" } ],
+    "afterAgentResponse":  [ { "command": "./hooks/memory-hook.sh" } ],
+    "afterFileEdit":       [ { "command": "./hooks/memory-hook.sh" } ],
+    "afterShellExecution": [ { "command": "./hooks/memory-hook.sh" } ],
+    "preCompact":          [ { "command": "./hooks/memory-hook.sh" } ],
+    "sessionEnd":         [ { "command": "./hooks/memory-hook.sh" } ],
+    "stop":                [ { "command": "./hooks/memory-hook.sh" } ]
+  }
+}

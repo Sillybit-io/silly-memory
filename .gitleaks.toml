@@ -1,0 +1,35 @@
+# .gitleaks.toml — LOCAL developer-convenience allowlist ONLY.
+#
+# SCOPE: this file only tunes a LOCAL `gitleaks detect` run so the canonical
+# EXAMPLE fixtures in this repo don't produce noise for a developer who happens
+# to have gitleaks installed. gitleaks is NOT part of this project's toolchain
+# and is NOT required by any gate.
+#
+# THIS FILE DOES NOT AFFECT GITHUB PUSH PROTECTION. GitHub's server-side secret
+# scanning / push protection runs its own detectors and ignores repository
+# config like this one. The real safeguards are:
+#   1. the committed bytes are obviously-fake EXAMPLE tokens
+#      (see memory/tests/test_memory.py), and
+#   2. scripts/secret_scan.py --tracked — the project's actual stdlib
+#      pre-publish secret gate (no gitleaks dependency).
+# If a fixture ever does trip GitHub push protection, use GitHub's per-secret
+# "allow" bypass on the push (documented in docs/publishing.md), not this file.
+
+title = "cursor-memory-system local allowlist"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Canonical EXAMPLE fixtures + test corpus (LOCAL dev only; NOT a GitHub push-protection control)."
+# The whole test corpus is synthetic fixtures — allow it wholesale.
+paths = [
+  '''memory/tests/.*''',
+]
+# Belt-and-suspenders regexes for the specific canonical example tokens. Written
+# with regex metacharacters (\s, {20,}) rather than literal bytes so they never
+# self-trip scripts/secret_scan.py once this file is itself committed.
+regexes = [
+  '''sk-EXAMPLE0{20,}''',
+  '''Bearer\s+EXAMPLE_TOKEN''',
+]

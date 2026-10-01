@@ -1,0 +1,109 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shellcheck:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: brew install shellcheck
+      - name: Run shellcheck
+        run: |
+          shellcheck \
+            install.sh \
+            upgrade.sh \
+            uninstall.sh \
+            bootstrap.sh \
+            memory/install-zsh.sh \
+            memory/lib/memory_system/bash_helpers.sh \
+            cursor-extras/hooks/memory-hook.sh \
+            claude-code-extras/hooks/silly-memory-hook.sh
+
+  unittest:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Run unit tests
+        run: python3 -m unittest discover -s memory/tests -p "test_*.py" -v
+
+  perf:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Cache HF weights
+        uses: actions/cache@v4
+        with:
+          path: memory/weights
+          key: hf-weights-${{ hashFiles('memory/weights/**') }}
+      - name: Run perf tests
+        env:
+          MEMORY_PERF_RESULTS: perf-results.jsonl
+        run: python3 -m unittest discover -s memory/tests -p "test_perf_*.py" -v
+      - name: Upload perf evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results
+          path: perf-results.jsonl
+          if-no-files-found: ignore
+
+  zero-network:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Run zero-network defense-in-depth test
+        run: python3 -m unittest memory.tests.test_zero_network -v
+
+  structure:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate cursor-extras/hooks.json is valid JSON
+        run: python3 -c 'import json; json.load(open("cursor-extras/hooks.json"))'
+      - name: Validate claude-code-extras/hooks.json (JSON, six events, the silly-memory shim)
+        run: |
+          python3 - <<'PY'
+          import json
+          hooks = json.load(open("claude-code-extras/hooks.json"))["hooks"]
+          expected = {"SessionStart", "UserPromptSubmit", "PostToolUse", "Stop", "PreCompact", "SessionEnd"}
+          assert set(hooks) == expected, sorted(hooks)
+          commands = [h["command"] for groups in hooks.values() for g in groups for h in g["hooks"]]
+          assert all(c.endswith("/silly-memory-hook.sh") for c in commands), commands
+          PY
+      - name: Validate VERSION file exists
+        run: test -f VERSION

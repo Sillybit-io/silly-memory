@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "skills": {
+    "ai-audit": {
+      "source": "Sillybit-io/silly-skills",
+      "sourceType": "github",
+      "skillPath": "skills/ai-health/ai-audit/SKILL.md",
+      "computedHash": "440e9b2bd10bf831d66a59624ce6f047abbff72ac89a5ae66e9c67b1dd345874"
+    },
+    "ai-review": {
+      "source": "Sillybit-io/silly-skills",
+      "sourceType": "github",
+      "skillPath": "skills/review/ai-review/SKILL.md",
+      "computedHash": "b70c8292b4fdfdcf82354979974a4ec75710746f7e853ee0aa7d1d90a451d1e6"
+    },
+    "conventions-codifier": {
+      "source": "Sillybit-io/silly-skills",
+      "sourceType": "github",
+      "skillPath": "skills/workflow/conventions-codifier/SKILL.md",
+      "computedHash": "8674d8f112fd2b38fb5418812ae19da91951470b90695af6ec1962f0e35d5a8d"
+    },
+    "create-agent": {
+      "source": "Sillybit-io/silly-skills",
+      "sourceType": "github",
+      "skillPath": "skills/workflow/create-agent/SKILL.md",
+      "computedHash": "52065374bef8709fad376cf89b8cf59b892c550de42123f7e7447c6ee3ba73b5"
+    },
+    "doc-cleanup": {
+      "source": "Sillybit-io/silly-skills",
+      "sourceType": "github",
+      "skillPath": "skills/docs/doc-cleanup/SKILL.md",
+      "computedHash": "270638b50ee3f4389d28fdaea1656a7033a3fd3b28d02b254cac4f7bf652e469"
+    },
+    "issue-refiner": {
+      "source": "Sillybit-io/silly-skills",
+      "sourceType": "github",
+      "skillPath": "skills/workflow/issue-refiner/SKILL.md",
+      "computedHash": "3600e47bb7d61ffd439e27a5c92378231d18e3f11ccd194f058291c19dacc01f"
+    },
+    "plan-review": {
+      "source": "Sillybit-io/silly-skills",
+      "sourceType": "github",
+      "skillPath": "skills/planning/plan-review/SKILL.md",
+      "computedHash": "2feafacd73e6249d0ea84d3939875779ee639fc0c66bdde7a92a39b5b2acbf72"
+    },
+    "plan-writer": {
+      "source": "Sillybit-io/silly-skills",
+      "sourceType": "github",
+      "skillPath": "skills/planning/plan-writer/SKILL.md",
+      "computedHash": "7820753f9cb2cea432d49fa3a499871b037c6abbb9006f2ae2fb6d001a5d5c99"
+    },
+    "pr-description": {
+      "source": "Sillybit-io/silly-skills",
+      "sourceType": "github",
+      "skillPath": "skills/review/pr-description/SKILL.md",
+      "computedHash": "3c197a7edad1a6a9fc1495fd8079070f42255c2c40d60984cffea821dffa2d13"
+    },
+    "review-response": {
+      "source": "Sillybit-io/silly-skills",
+      "sourceType": "github",
+      "skillPath": "skills/review/review-response/SKILL.md",
+      "computedHash": "a7a234d5e05310b4cdb2812e7f7e53301a3dbd9bb52a570ceebbde49289b5ab5"
+    },
+    "secret-and-privacy-sweep": {
+      "source": "Sillybit-io/silly-skills",
+      "sourceType": "github",
+      "skillPath": "skills/workflow/secret-and-privacy-sweep/SKILL.md",
+      "computedHash": "897af3120194d94003256f13e7feef7c2dc1876b5aff3b428488254f835507b3"
+    },
+    "skill-writer": {
+      "source": "Sillybit-io/silly-skills",
+      "sourceType": "github",
+      "skillPath": "skills/workflow/skill-writer/SKILL.md",
+      "computedHash": "67101030e391aebcdd27f86e900487be031f74909daa85f0628b017d1e11fba0"
+    },
+    "tech-writing": {
+      "source": "Sillybit-io/silly-skills",
+      "sourceType": "github",
+      "skillPath": "skills/docs/tech-writing/SKILL.md",
+      "computedHash": "41022645fd0e7d1debf86a1eb1233c98c03b800d0fbf4b1a2395d8575106d225"
+    },
+    "ui-engineering": {
+      "source": "Sillybit-io/silly-skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/ui-engineering/SKILL.md",
+      "computedHash": "44b75eb6796bb097eadffcf1af3b95bcb2beb546f8cdfd00225cdcf5b21b30b9"
+    }
+  }
+}

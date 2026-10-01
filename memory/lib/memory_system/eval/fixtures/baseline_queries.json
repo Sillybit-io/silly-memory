@@ -1,0 +1,42 @@
+[
+  {
+    "query": "React hooks decision useState useEffect",
+    "expected_memory_keywords": ["react", "hooks"]
+  },
+  {
+    "query": "Python version requirement minimum supported",
+    "expected_memory_keywords": ["python", "version"]
+  },
+  {
+    "query": "Tailwind CSS utility class styling approach",
+    "expected_memory_keywords": ["tailwind", "styling"]
+  },
+  {
+    "query": "TypeScript strict mode compiler configuration",
+    "expected_memory_keywords": ["typescript", "strict"]
+  },
+  {
+    "query": "PostgreSQL database schema design choice",
+    "expected_memory_keywords": ["postgres", "database"]
+  },
+  {
+    "query": "authentication JWT token session management",
+    "expected_memory_keywords": ["authentication", "jwt"]
+  },
+  {
+    "query": "pytest unit testing framework setup",
+    "expected_memory_keywords": ["pytest", "testing"]
+  },
+  {
+    "query": "REST API endpoint versioning design pattern",
+    "expected_memory_keywords": ["api", "endpoint"]
+  },
+  {
+    "query": "open action items deadline owner assigned",
+    "expected_memory_keywords": ["action", "deadline"]
+  },
+  {
+    "query": "team coding convention style preference guide",
+    "expected_memory_keywords": ["prefer", "convention"]
+  }
+]

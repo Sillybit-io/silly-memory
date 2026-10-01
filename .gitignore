@@ -1,0 +1,50 @@
+# macOS
+.DS_Store
+._*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Cursor IDE runtime
+.cursor/
+
+# silly-memory project marker and generated Claude Code rule
+.silly-memory/
+.claude/rules/_memory-context.md
+
+# Project state (Atlas/Prometheus orchestration runtime)
+.omo/
+.remember/
+
+# Backups / archives
+*.tar.gz
+*.bak
+.backup-*
+.test_*.bak
+
+# SQLite WAL/SHM (memory store)
+*.sqlite-wal
+*.sqlite-shm
+
+# Lock files (transient)
+*.lock
+
+# Playwright artifacts
+.playwright-mcp/
+
+# Misc working-tree noise
+topics_to_discuss.md
+
+# Implementation plans (private working notes)
+docs/plans/
+memory/3e880c95498218e4/
+
+# Local editor/agent config
+opencode.jsonc
+
+# Local-only account names for scripts/secret_scan.py (must never be published)
+.secret-scan-usernames

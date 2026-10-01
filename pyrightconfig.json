@@ -1,0 +1,7 @@
+{
+  "include": ["memory/lib"],
+  "exclude": ["memory/tests", "memory/hooks", "memory/queues", "task-26-test"],
+  "reportMissingTypeArgument": "none",
+  "reportImportCycles": "none",
+  "extraPaths": ["memory/lib"]
+}

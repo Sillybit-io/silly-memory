@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "~/.claude/hooks/silly-memory-hook.sh", "timeout": 10 } ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "~/.claude/hooks/silly-memory-hook.sh", "timeout": 10 } ] }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^(Edit|Write|MultiEdit|NotebookEdit)$",
+        "hooks": [ { "type": "command", "command": "~/.claude/hooks/silly-memory-hook.sh", "timeout": 10 } ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [ { "type": "command", "command": "~/.claude/hooks/silly-memory-hook.sh", "timeout": 10 } ]
+      }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "~/.claude/hooks/silly-memory-hook.sh", "timeout": 10 } ] }
+    ],
+    "PreCompact": [
+      { "hooks": [ { "type": "command", "command": "~/.claude/hooks/silly-memory-hook.sh", "timeout": 10 } ] }
+    ],
+    "SessionEnd": [
+      { "hooks": [ { "type": "command", "command": "~/.claude/hooks/silly-memory-hook.sh", "timeout": 30 } ] }
+    ]
+  }
+}

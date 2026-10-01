@@ -1,0 +1,43 @@
+# Memory recall
+
+silly-memory loads this project's memory pack at session start. When you need a fact, person, decision, or action item that is not in it, search memory before answering. Use results to ground your answer. Do not invent facts missing from recall output.
+
+## Memory tools
+
+Prefer the silly-memory MCP tools when they are connected:
+
+- `memory_recall` — search memory. `scope: "workspace"` (the default) covers this project plus global memory; `scope: "all"` searches every project.
+- `memory_tasks` — list action items. Filter with `status` (`open` or `all`), `tag`, and `owner`; `all: true` covers every project.
+- `memory_add` — store one fact at full confidence when the user asks you to remember something. `scope` is `auto` (the default), `workspace`, or `global`.
+
+If the tools are not connected (the server is off unless silly-memory was installed with `--mcp`), run the commands below instead; they do the same. The `query-memory` and `add-memory` skills describe them in full.
+
+The user controls what is remembered:
+
+- Text inside `<private>…</private>` is never stored. Do not repeat it into memory or pass it to `memory_add` or `memory add`.
+- A prompt that starts with "remember that …" is stored as an explicit fact when the session's memory is next processed. Call `memory_add` (or run `memory add`) as well only when the fact must be recallable right away.
+
+## Command line
+
+Run from anywhere in the project:
+
+```bash
+python3 "${SILLY_MEMORY_HOME:-$HOME/.silly-memory}/bin/memory" recall "<keywords>"
+python3 "${SILLY_MEMORY_HOME:-$HOME/.silly-memory}/bin/memory" recall "<keywords>" --all   # every project
+python3 "${SILLY_MEMORY_HOME:-$HOME/.silly-memory}/bin/memory" add "<fact>"   # --scope workspace|global forces the store
+```
+
+## Action items / tasks
+
+The memory pack is token-capped and often omits action items. When the user asks to list, count, filter, or summarize action items, tasks, to-dos, or open work, do NOT rely on the pack — use `memory_tasks` or the command below, and base your answer on its output:
+
+```bash
+MEMORY_CLI="${SILLY_MEMORY_HOME:-$HOME/.silly-memory}/bin/memory"
+python3 "$MEMORY_CLI" tasks --status open          # open items (default)
+python3 "$MEMORY_CLI" tasks --status all           # include done
+python3 "$MEMORY_CLI" tasks --tag <t> --owner <name>
+python3 "$MEMORY_CLI" tasks --all                  # across all workspaces
+python3 "$MEMORY_CLI" tasks --json                 # structured JSON (parse fields)
+```
+
+External systems (Jira, Confluence, GitLab) remain read-only unless the user explicitly approves a write in that turn.

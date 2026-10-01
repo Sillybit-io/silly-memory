@@ -1,0 +1,641 @@
+#!/usr/bin/env python3
+"""silly-memory CLI."""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+LIB = Path(__file__).resolve().parent.parent / "lib"
+sys.path.insert(0, str(LIB))
+
+from memory_system.events import append_event
+from memory_system.events.ingress import TOOLS, detect_tool, format_output, normalize
+from memory_system.events.observer import run_observer
+from memory_system.events.worker import handle_hook_job, process_queue
+from memory_system.index import rebuild_index, recall_all
+from memory_system.paths import ensure_layout, global_store, resolve_workspace_root, workspace_marker, workspace_store
+from memory_system.preflight import check_fts5_available, check_sync_filesystem
+from memory_system.project_mcp import ensure_project_mcp, mcp_enabled
+from memory_system.recall.context_pack import render_context_pack, render_rule_file, session_start_top_up
+from memory_system.recall.distiller import promote_staging
+from memory_system.reflection.reflector import run_reflector
+from memory_system.safety import LockTimeout
+from memory_system.status import (
+    VIEWS,
+    render_paths,
+    render_status,
+    render_status_json,
+    render_tasks,
+    render_tasks_json,
+    render_workspaces,
+    show_view,
+)
+from memory_system.system.config import memory_home
+
+
+def cmd_recall(args: argparse.Namespace) -> int:
+    if getattr(args, "all", False):
+        return _recall_every_workspace(args.query, args.limit)
+    root = resolve_workspace_root(Path(args.workspace))
+    results = recall_all(root, args.query, limit=args.limit)
+    if not results:
+        print("No matches.")
+        return 0
+    for r in results:
+        print(f"[{r.get('scope')}] {r.get('path')} / {r.get('section')}")
+        print(f"  {r.get('snippet')}")
+    return 0
+
+
+def _recall_every_workspace(query: str, limit: int) -> int:
+    from memory_system.recall.recall_hybrid import StoreSearchError, search_all
+
+    try:
+        results = search_all(query, limit=limit)
+    except StoreSearchError as exc:
+        print(f"recall: {exc}", file=sys.stderr)
+        return 1
+    if not results:
+        print("No matches.")
+        return 0
+    for r in results:
+        print(f"[{r.get('workspace_label')}] {r.get('path')} / {r.get('section')}")
+        print(f"  {r.get('snippet')}")
+    return 0
+
+
+def cmd_add(args: argparse.Namespace) -> int:
+    """Store one fact at full confidence: the same path as the MCP tool ``memory_add``."""
+    from memory_system.learning.explicit import store_explicit_fact
+    from memory_system.paths import GLOBAL_ID
+
+    text = " ".join(args.text)
+    if text == "-":
+        text = sys.stdin.read()
+    root = resolve_workspace_root(Path(args.workspace))
+    try:
+        bank_file = store_explicit_fact(root, text, args.scope)
+    except LockTimeout:
+        print("add: the memory store is busy; nothing was stored, try again in a moment", file=sys.stderr)
+        return PROCESS_INCOMPLETE
+    if bank_file is None:
+        print("add: nothing stored: the text is empty or entirely private", file=sys.stderr)
+        return 1
+    try:
+        render_rule_file(root)
+    except Exception as exc:
+        print(f"add: saved, but refreshing the project rules failed ({exc}); they refresh at the next session start or end",
+              file=sys.stderr)
+    scope = "global" if bank_file.parent.parent.name == GLOBAL_ID else "workspace"
+    if args.json:
+        print(json.dumps({"status": "saved", "file": str(bank_file), "scope": scope, "workspace": str(root)}))
+    else:
+        print(f"saved to {bank_file} ({'global memory' if scope == 'global' else f'the memory for {root}'})")
+    return 0
+
+
+def cmd_render(args: argparse.Namespace) -> int:
+    root = resolve_workspace_root(Path(args.workspace))
+    path = render_rule_file(root)
+    print(str(path))
+    return 0
+
+
+def cmd_observe(args: argparse.Namespace) -> int:
+    root = resolve_workspace_root(Path(args.workspace))
+    changed = run_observer(root, force=args.force)
+    print("observed" if changed else "skipped")
+    return 0
+
+
+def cmd_reflect(args: argparse.Namespace) -> int:
+    root = resolve_workspace_root(Path(args.workspace))
+    changed = run_reflector(root, force=args.force)
+    print("reflected" if changed else "skipped")
+    return 0
+
+
+PROCESS_INCOMPLETE = 75  # EX_TEMPFAIL: queued work is kept; run `memory process` again later.
+
+
+def cmd_process(args: argparse.Namespace) -> int:
+    root = resolve_workspace_root(Path(args.workspace))
+    if process_queue(root):
+        return 0
+    print(
+        "process: another worker is busy or a lock timed out; queued work is kept for the next run",
+        file=sys.stderr,
+    )
+    return PROCESS_INCOMPLETE
+
+
+def cmd_reindex(args: argparse.Namespace) -> int:
+    root = resolve_workspace_root(Path(args.workspace))
+    ws = workspace_store(root)
+    gs = global_store()
+    ensure_layout(ws)
+    ensure_layout(gs)
+    print(f"workspace: {rebuild_index(ws, ws.name)} docs")
+    print(f"global: {rebuild_index(gs, '_global')} docs")
+    return 0
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    root = resolve_workspace_root(Path(args.workspace))
+    if getattr(args, "json", False):
+        print(render_status_json(root))
+    else:
+        print(render_status(root))
+    return 0
+
+
+def cmd_show(args: argparse.Namespace) -> int:
+    root = resolve_workspace_root(Path(args.workspace))
+    print(show_view(root, args.view, limit=args.limit))
+    return 0
+
+
+def cmd_tasks(args: argparse.Namespace) -> int:
+    root = resolve_workspace_root(Path(args.workspace))
+    renderer = render_tasks_json if args.json else render_tasks
+    print(renderer(root, status=args.status, tag=args.tag, owner=args.owner, all_workspaces=args.all))
+    return 0
+
+
+def cmd_workspaces(args: argparse.Namespace) -> int:
+    print(render_workspaces())
+    return 0
+
+
+def cmd_paths(args: argparse.Namespace) -> int:
+    root = resolve_workspace_root(Path(args.workspace))
+    print(render_paths(root, scope=args.scope))
+    return 0
+
+
+def cmd_selftest(args: argparse.Namespace) -> int:
+    import unittest
+
+    tests_dir = Path(__file__).resolve().parent.parent / "tests"
+    result = unittest.TextTestRunner(verbosity=2).run(_selftest_suite(tests_dir))
+    return 0 if result.wasSuccessful() else 1
+
+
+def _selftest_suite(tests_dir: Path):
+    import types
+    import unittest
+
+    engine = tests_dir.parent
+    if engine.name == "memory":
+        # Top level two dirs up (the repo root, or the folder holding an engine
+        # named `memory`) so the tests' `memory.tests.*` imports resolve.
+        top_level = engine.parent
+    else:
+        # An engine installed as ~/.silly-memory: alias it as the `memory`
+        # package the tests import from.
+        alias = types.ModuleType("memory")
+        alias.__path__ = [str(engine)]
+        sys.modules.setdefault("memory", alias)
+        top_level = engine
+    return unittest.TestLoader().discover(start_dir=str(tests_dir), pattern="test_*.py", top_level_dir=str(top_level))
+
+
+def cmd_memdelete(args: argparse.Namespace) -> int:
+    from memory_system.cli.cli_delete import delete_entry
+
+    root = resolve_workspace_root(Path(args.workspace))
+    return delete_entry(
+        workspace=root,
+        entry_id=args.entry_id,
+        confirm=args.confirm,
+        dry_run=args.dry_run,
+    )
+
+
+def cmd_memprune_review(args: argparse.Namespace) -> int:
+    from memory_system.cli.cli_delete import prune_review
+
+    root = resolve_workspace_root(Path(args.workspace))
+    return prune_review(
+        workspace=root,
+        floor=args.floor,
+        confirm_all=args.confirm_all,
+        dry_run=args.dry_run,
+    )
+
+
+def cmd_meminspect(args: argparse.Namespace) -> int:
+    from memory_system.cli.cli_inspect import inspect_entry
+
+    root = resolve_workspace_root(Path(args.workspace))
+    return inspect_entry(
+        workspace=root,
+        entry_id=args.entry_id,
+        json_output=args.json,
+    )
+
+
+def cmd_memwhy(args: argparse.Namespace) -> int:
+    from memory_system.cli.cli_inspect import explain_context_pack
+
+    root = resolve_workspace_root(Path(args.workspace))
+    return explain_context_pack(
+        workspace=root,
+        json_output=args.json,
+    )
+
+
+def cmd_memlearn_status(args: argparse.Namespace) -> int:
+    from memory_system.cli.cli_learn_status import render_learn_status
+
+    root = resolve_workspace_root(Path(args.workspace))
+    return render_learn_status(
+        workspace=root,
+        json_output=args.json,
+    )
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    from memory_system.cli.doctor import run_doctor
+
+    return run_doctor(json_output=bool(getattr(args, "json", False)))
+
+
+def cmd_export(args: argparse.Namespace) -> int:
+    import datetime
+
+    from memory_system.lifecycle.export_bundle import NothingToExportError, create_bundle
+
+    home = memory_home()
+
+    explicit: dict[str, str] | None = None
+    projects = getattr(args, "project", None)
+    if projects:
+        explicit = {}
+        for raw in projects:
+            proj = Path(raw).expanduser().resolve()
+            marker = workspace_marker(proj)
+            store_id = marker.read_text(encoding="utf-8").strip() if marker.is_file() else ""
+            if store_id:
+                explicit[str(proj)] = store_id
+            else:
+                print(f"export: no memory marker under {proj}; skipping", file=sys.stderr)
+
+    if args.out:
+        out = Path(args.out).expanduser().resolve()
+    else:
+        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        out = home.parent / f"silly-memory-export-{stamp}.tar.gz"
+
+    try:
+        bundle = create_bundle(home, out, project_markers=explicit)
+    except NothingToExportError as exc:
+        print(f"nothing to export: {exc}", file=sys.stderr)
+        return 1
+
+    print(str(bundle))
+    return 0
+
+
+def cmd_import(args: argparse.Namespace) -> int:
+    if getattr(args, "confirm_import", "") != "YES-IMPORT":
+        print(
+            "import: refusing to import without --confirm-import YES-IMPORT (no changes made)",
+            file=sys.stderr,
+        )
+        return 1
+
+    from memory_system.lifecycle.export_bundle import (
+        BundleError,
+        BundleVerificationError,
+        import_bundle,
+    )
+
+    bundle = Path(args.bundle).expanduser().resolve()
+    if not bundle.is_file():
+        print(f"import: no bundle at {bundle}", file=sys.stderr)
+        return 1
+
+    mapping: dict[str, str] = {}
+    for raw in getattr(args, "map_workspace", None) or []:
+        old, sep, new = raw.partition("=")
+        old, new = old.strip(), new.strip()
+        if not sep or not old or not new:
+            print(
+                f"import: --map-workspace expects OLD_ROOT=NEW_ROOT, got {raw!r}",
+                file=sys.stderr,
+            )
+            return 1
+        mapping[old] = new
+
+    try:
+        summary = import_bundle(
+            bundle,
+            memory_home(),
+            "YES-IMPORT",
+            relink=bool(getattr(args, "relink", False)),
+            map_workspace=mapping or None,
+        )
+    except (BundleError, BundleVerificationError) as exc:
+        print(f"import: refused: {exc}", file=sys.stderr)
+        return 1
+
+    workspaces = summary.get("workspaces") or []
+    print(f"imported {len(workspaces)} workspace(s) into {summary['memory_home']}")
+    if summary.get("snapshot"):
+        print(f"  pre-import snapshot: {summary['snapshot']}")
+    for new_root, store_id in (summary.get("mapped") or {}).items():
+        print(f"  remapped {store_id} -> {new_root}")
+    for root, store_id in (summary.get("relinked") or {}).items():
+        print(f"  relinked {store_id} in place -> {root}")
+
+    did_relink = bool(getattr(args, "relink", False)) or bool(mapping)
+    unresolved = summary.get("unresolved") or {}
+    if did_relink and unresolved:
+        print("  projects not found on this machine — relink each manually:", file=sys.stderr)
+        for root, store_id in unresolved.items():
+            marker = workspace_marker(Path(root))
+            print(
+                f"    mkdir -p {marker.parent} && echo {store_id} > {marker}",
+                file=sys.stderr,
+            )
+            print(f"    (or re-run with --map-workspace {root}=<NEW_ROOT>)", file=sys.stderr)
+
+    return 0
+
+
+def cmd_profile_sync(args: argparse.Namespace) -> int:
+    from memory_system.system.profile import sync_profile
+
+    result = sync_profile()
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
+_CAPTURE_HOOKS = ("beforeSubmitPrompt", "afterAgentResponse", "afterFileEdit", "afterShellExecution")
+
+
+def _dispatch_hook(tool: str, events: list[dict]) -> dict:
+    """Record and act on one native hook's canonical events; return the hook's reply."""
+    event_ids: list[str] = []
+    context: str | None = None
+    new_handoff: str | None = None
+    root = Path(events[0]["workspace_roots"][0])
+    for event in events:
+        root = Path(event["workspace_roots"][0])
+        hook = event["hook_event_name"]
+        identity = {"source": event.get("source"), "conversation_id": event.get("conversation_id")}
+        event_id = append_event(root, hook, event)
+        if event_id:
+            event_ids.append(event_id)
+        if hook == "sessionStart":
+            try:
+                render_rule_file(root)
+            except LockTimeout:
+                pass  # The rules refresh on the next boundary; the session still gets its context.
+            try:
+                if mcp_enabled():
+                    ensure_project_mcp(root)  # The memory tools load from the next session on.
+            except OSError:
+                pass  # A read-only project keeps working without them; memdoctor reports it.
+            context = session_start_top_up(
+                root,
+                session_source=event.get("session_source", "startup"),
+                handoff_token=event.get("handoff_token"),
+                **identity,
+            )
+        elif hook in ("preCompact", "sessionEnd", "stop"):
+            new_handoff = handle_hook_job(root, hook, handoff_token=event.get("handoff_token"), **identity) or new_handoff
+        elif hook in _CAPTURE_HOOKS:
+            handle_hook_job(root, "observe", **identity)
+    reply = format_output(tool, "sessionStart" if context else events[-1]["hook_event_name"], context)
+    if tool == "opencode":
+        # Only reached after every event was persisted; the plugin checkpoints on this.
+        capture: dict[str, object] = {
+            "status": "ok",
+            "event_ids": event_ids,
+            "workspace_root": str(root),
+            "store_path": str(workspace_store(root)),
+        }
+        if new_handoff:
+            capture["handoff_token"] = new_handoff
+        reply["memory_capture"] = capture
+    return reply
+
+
+def cmd_hook(args: argparse.Namespace) -> int:
+    reply: dict = {}
+    try:
+        raw = sys.stdin.read()
+        payload = json.loads(raw) if raw.strip() else {}
+        if isinstance(payload, dict):
+            tool = getattr(args, "tool", None) or detect_tool(payload)
+            if tool == "cursor" and not payload.get("hook_event_name"):
+                payload["hook_event_name"] = getattr(args, "event", "unknown")
+            events = normalize(tool, payload) if tool else []
+            if events:
+                reply = _dispatch_hook(tool, events)
+    except Exception:
+        reply = {}
+    print(json.dumps(reply))
+    return 0
+
+
+def main() -> int:
+    ok, err = check_fts5_available()
+    if not ok:
+        print(err, file=sys.stderr)
+        return 2
+
+    sync_ok, sync_err = check_sync_filesystem(memory_home())
+    if not sync_ok and sync_err:
+        print(sync_err, file=sys.stderr)
+
+    p = argparse.ArgumentParser(prog="memory")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    r = sub.add_parser("recall")
+    r.add_argument("query")
+    r.add_argument("--workspace", default=".")
+    r.add_argument("--limit", type=int, default=10)
+    r.add_argument("--all", action="store_true", help="search every tracked workspace plus global memory")
+    r.set_defaults(func=cmd_recall)
+
+    ad = sub.add_parser("add", help="store one fact at full confidence (what the MCP tool memory_add does)")
+    ad.add_argument("text", nargs="+", help="the fact; '-' reads it from stdin")
+    ad.add_argument("--scope", choices=("auto", "workspace", "global"), default="auto",
+                    help="auto routes by category; workspace or global forces the store")
+    ad.add_argument("--workspace", default=".")
+    ad.add_argument("--json", action="store_true", help="emit structured JSON")
+    ad.set_defaults(func=cmd_add)
+
+    ren = sub.add_parser("render")
+    ren.add_argument("--workspace", default=".")
+    ren.set_defaults(func=cmd_render)
+
+    o = sub.add_parser("observe")
+    o.add_argument("--workspace", default=".")
+    o.add_argument("--force", action="store_true")
+    o.set_defaults(func=cmd_observe)
+
+    rf = sub.add_parser("reflect")
+    rf.add_argument("--workspace", default=".")
+    rf.add_argument("--force", action="store_true")
+    rf.set_defaults(func=cmd_reflect)
+
+    pr = sub.add_parser("process")
+    pr.add_argument("--workspace", default=".")
+    pr.set_defaults(func=cmd_process)
+
+    ri = sub.add_parser("reindex")
+    ri.add_argument("--workspace", default=".")
+    ri.set_defaults(func=cmd_reindex)
+
+    st = sub.add_parser("status", help="print a dashboard of the memory store")
+    st.add_argument("--workspace", default=".")
+    st.add_argument("--json", action="store_true", help="emit structured JSON (no banner text)")
+    st.set_defaults(func=cmd_status)
+
+    sh = sub.add_parser("show", help="inspect a specific view of memory")
+    sh.add_argument("view", choices=VIEWS)
+    sh.add_argument("--workspace", default=".")
+    sh.add_argument("--limit", type=int, default=40)
+    sh.set_defaults(func=cmd_show)
+
+    tk = sub.add_parser("tasks", help="list action items as a task list")
+    tk.add_argument("--workspace", default=".")
+    tk.add_argument("--status", choices=("open", "done", "all"), default="open")
+    tk.add_argument("--tag", default=None, help="filter by tag, e.g. release")
+    tk.add_argument("--owner", default=None, help="filter by owner substring")
+    tk.add_argument("--all", action="store_true", help="aggregate across all workspaces")
+    tk.add_argument("--json", action="store_true", help="emit structured JSON instead of text")
+    tk.set_defaults(func=cmd_tasks)
+
+    wl = sub.add_parser("workspaces", help="list tracked workspaces to pick from")
+    wl.set_defaults(func=cmd_workspaces)
+
+    pa = sub.add_parser("paths", help="list all memory markdown files with absolute paths")
+    pa.add_argument("--workspace", default=".")
+    pa.add_argument("--scope", choices=("workspace", "global", "all"), default="all")
+    pa.set_defaults(func=cmd_paths)
+
+    st2 = sub.add_parser("selftest", help="run the regression test suite (isolated)")
+    st2.set_defaults(func=cmd_selftest)
+
+    md = sub.add_parser(
+        "memdelete", aliases=["delete"], help="delete a memory entry by id (requires --confirm)"
+    )
+    md.add_argument("entry_id", help="entry id in <filename>:<lineno> form")
+    md.add_argument("--workspace", default=".")
+    md.add_argument("--confirm", action="store_true", help="required to actually delete")
+    md.add_argument("--dry-run", action="store_true", help="preview without modifying")
+    md.set_defaults(func=cmd_memdelete)
+
+    mpr = sub.add_parser(
+        "memprune-review",
+        aliases=["prune-review"],
+        help="review decay candidates (score <= floor) and delete with confirmation",
+    )
+    mpr.add_argument("--workspace", default=".")
+    mpr.add_argument("--floor", type=float, default=0.1, help="score threshold for candidates")
+    mpr.add_argument(
+        "--confirm-all", action="store_true", help="bypass per-entry prompt and delete all"
+    )
+    mpr.add_argument("--dry-run", action="store_true", help="list candidates without deleting")
+    mpr.set_defaults(func=cmd_memprune_review)
+
+    mi = sub.add_parser(
+        "meminspect",
+        aliases=["inspect"],
+        help="show all metadata for a single memory entry (read-only)",
+    )
+    mi.add_argument("entry_id", help="entry id in <filename>:<lineno> form")
+    mi.add_argument("--workspace", default=".")
+    mi.add_argument("--json", action="store_true", help="emit structured JSON")
+    mi.set_defaults(func=cmd_meminspect)
+
+    mw = sub.add_parser(
+        "memwhy",
+        aliases=["why"],
+        help="explain why each entry in the current context pack was included (read-only)",
+    )
+    mw.add_argument("--workspace", default=".")
+    mw.add_argument("--json", action="store_true", help="emit structured JSON")
+    mw.set_defaults(func=cmd_memwhy)
+
+    mls = sub.add_parser(
+        "memlearn-status",
+        aliases=["learn-status"],
+        help="report self-teaching loop telemetry (corrections, reinforcements, contradictions)",
+    )
+    mls.add_argument("--workspace", default=".")
+    mls.add_argument("--json", action="store_true", help="emit structured JSON")
+    mls.set_defaults(func=cmd_memlearn_status)
+
+    dr = sub.add_parser(
+        "doctor",
+        help="run 10 health checks; exit 0 healthy / 1 warn / 2 error",
+    )
+    dr.add_argument("--json", action="store_true", help="emit a single JSON object")
+    dr.set_defaults(func=cmd_doctor)
+
+    ex = sub.add_parser(
+        "export",
+        help="write a portable .tar.gz data bundle of your memory store",
+    )
+    ex.add_argument(
+        "--out",
+        default=None,
+        help="output path for the .tar.gz (default: <memory_home>/../silly-memory-export-<ts>.tar.gz)",
+    )
+    ex.add_argument(
+        "--project",
+        action="append",
+        help="workspace dir to relink on import (repeatable); auto-derived from each store otherwise",
+    )
+    ex.set_defaults(func=cmd_export)
+
+    im = sub.add_parser(
+        "import",
+        help="import a portable .tar.gz memory bundle (snapshots your store first)",
+    )
+    im.add_argument("bundle", help="path to the .tar.gz produced by 'memory export'")
+    im.add_argument(
+        "--confirm-import",
+        dest="confirm_import",
+        default="",
+        help="must equal YES-IMPORT to proceed (import overwrites store files after snapshotting)",
+    )
+    im.add_argument(
+        "--relink",
+        action="store_true",
+        help="re-plant .silly-memory/memory-id markers for imported projects present on this machine",
+    )
+    im.add_argument(
+        "--map-workspace",
+        dest="map_workspace",
+        action="append",
+        metavar="OLD_ROOT=NEW_ROOT",
+        help="relink a moved project: plant NEW_ROOT/.silly-memory/memory-id and rewrite the store's .meta.json (repeatable)",
+    )
+    im.set_defaults(func=cmd_import)
+
+    ps = sub.add_parser(
+        "profile-sync",
+        help="sync _global/memory-bank/profile.md into the recognized global bank files",
+    )
+    ps.set_defaults(func=cmd_profile_sync)
+
+    h = sub.add_parser("hook")
+    h.add_argument("--event", default="unknown")
+    h.add_argument("--tool", choices=TOOLS, default=None, help="payload format; detected from the payload when omitted")
+    h.set_defaults(func=cmd_hook)
+
+    args = p.parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

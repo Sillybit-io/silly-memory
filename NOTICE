@@ -1,0 +1,14 @@
+silly-memory
+Copyright 2026 Sillybit (sillybit.io)
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes the all-MiniLM-L6-v2 sentence-embedding model by the
+Sentence-Transformers (SBERT) project
+(https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2), redistributed
+unmodified under the Apache License, Version 2.0, in
+memory/weights/all-MiniLM-L6-v2/ (see LICENSE in that folder).
+
+The agent skills in .agents/skills/ and agent/skills/ are Sillybit's
+silly-skills (https://github.com/Sillybit-io/silly-skills) and keep the license
+stated at the end of each file (CC BY-ND 4.0).
